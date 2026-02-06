@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Management Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Chart.js & DataLabels Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: {
+                            700: '#334155',
+                            800: '#1e3a8a', /* Navy Blue */
+                            900: '#0f172a',
+                        },
+                        orange: {
+                            500: '#f97316', /* Vibrant Orange */
+                            600: '#ea580c',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Sarabun', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        
+        /* Sidebar Transitions */
+        #sidebar { transition: width 0.3s ease; }
+        .sidebar-text { transition: opacity 0.2s ease; white-space: nowrap; }
+        .collapsed .sidebar-text { opacity: 0; pointer-events: none; width: 0; }
+        .collapsed #sidebar-header { justify-content: center; }
+        .collapsed #sidebar-header h1 { display: none; }
+        
+        /* Menu Item Styling */
+        .nav-item {
+            transition: all 0.2s;
+            border-left: 4px solid transparent;
+        }
+        .nav-item.active {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-left-color: #f97316; /* Orange */
+            color: #ffffff;
+        }
+        .nav-item:hover:not(.active) {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Smooth transition for progress bar */
+        #progress-fill { transition: width 0.3s ease-in-out; }
+
+        /* Multi-Select Styles */
+        .multiselect-dropdown {
+            max-height: 200px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+        .multiselect-dropdown::-webkit-scrollbar {
+            width: 6px;
+        }
+        .multiselect-dropdown::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        /* Inventory Table Scroll */
+        .table-container {
+            max-height: 600px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex overflow-hidden">
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="bg-navy-900 text-white flex flex-col w-64 flex-shrink-0 z-30 shadow-xl relative">
+        <!-- Sidebar Header -->
+        <div id="sidebar-header" class="h-16 flex items-center px-4 bg-navy-800 border-b border-navy-700 overflow-hidden">
+            <div class="bg-orange-500 p-1.5 rounded-lg flex-shrink-0 mr-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+            </div>
+            <h1 class="text-lg font-bold tracking-wide sidebar-text">Inventory App</h1>
+        </div>
+
+        <!-- Toggle Button -->
+        <button onclick="toggleSidebar()" class="absolute -right-3 top-20 bg-orange-500 hover:bg-orange-600 text-white p-1 rounded-full shadow-lg border border-white z-50 transform hover:scale-110 transition">
+            <svg id="toggle-icon" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7" />
+            </svg>
+        </button>
+
+        <!-- Navigation Menu -->
+        <nav class="flex-1 overflow-y-auto py-6 space-y-1">
+            <button onclick="switchTab('aging')" id="btn-aging" class="nav-item active w-full flex items-center px-4 py-3 text-gray-300">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="ml-3 font-medium sidebar-text">Aging Analysis</span>
+            </button>
+            <button onclick="switchTab('storage')" id="btn-storage" class="nav-item w-full flex items-center px-4 py-3 text-gray-300">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span class="ml-3 font-medium sidebar-text">Storage Capacity</span>
+            </button>
+            <button onclick="switchTab('12l1')" id="btn-12l1" class="nav-item w-full flex items-center px-4 py-3 text-gray-300">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="ml-3 font-medium sidebar-text">12L1 Overview</span>
+            </button>
+        </nav>
+
+        <!-- Sidebar Footer -->
+        <div class="p-4 bg-navy-800 border-t border-navy-700">
+             <div id="status-indicator" class="flex items-center gap-2 text-xs text-gray-400">
+                <span class="w-2 h-2 rounded-full bg-gray-500"></span> 
+                <span class="sidebar-text truncate">รอการเชื่อมต่อ...</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <div class="flex-1 flex flex-col h-screen overflow-hidden bg-gray-50">
+        
+        <!-- Top Bar -->
+        <header class="bg-white shadow-sm h-16 flex items-center px-6 z-10 justify-between">
+            <h2 id="page-title" class="text-xl font-bold text-navy-800">Aging Analysis</h2>
+        </header>
+
+        <!-- Scrollable Content -->
+        <main class="flex-1 overflow-y-auto">
+            
+            <!-- Tab Content: Aging -->
+            <div id="content-aging" class="tab-content block animate-fade-in">
+                
+                <!-- STICKY FILTERS -->
+                <div class="sticky top-0 z-20 bg-gray-100/95 backdrop-blur-sm px-6 py-4 border-b border-gray-200 shadow-sm">
+                    <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-sm font-bold text-gray-400 uppercase flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                Filters (Multi-Select)
+                            </h3>
+                            <button onclick="clearAllFilters()" class="text-xs text-red-500 hover:text-red-700 font-semibold underline flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                ล้างค่าตัวกรอง (Clear All)
+                            </button>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <!-- Multi-Select: Month -->
+                            <div class="relative" id="container-month">
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">Month</label>
+                                <button onclick="toggleDropdown('month')" id="btn-month" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 text-left p-2.5 flex justify-between items-center">
+                                    <span class="truncate">Select Months...</span>
+                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </button>
+                                <div id="dropdown-month" class="hidden absolute top-full left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 multiselect-dropdown p-2"></div>
+                            </div>
+
+                            <!-- Multi-Select: Aging Period -->
+                            <div class="relative" id="container-period">
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">Agd Period (Days)</label>
+                                <button onclick="toggleDropdown('period')" id="btn-period" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 text-left p-2.5 flex justify-between items-center">
+                                    <span class="truncate">Select Periods...</span>
+                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </button>
+                                <div id="dropdown-period" class="hidden absolute top-full left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 multiselect-dropdown p-2"></div>
+                            </div>
+
+                            <!-- Multi-Select: Status -->
+                            <div class="relative" id="container-status">
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+                                <button onclick="toggleDropdown('status')" id="btn-status" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 text-left p-2.5 flex justify-between items-center">
+                                    <span class="truncate">Select Status...</span>
+                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </button>
+                                <div id="dropdown-status" class="hidden absolute top-full left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 multiselect-dropdown p-2"></div>
+                            </div>
+
+                            <!-- Multi-Select: Sloc -->
+                            <div class="relative" id="container-sloc">
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">Sloc.</label>
+                                <button onclick="toggleDropdown('sloc')" id="btn-sloc" class="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 text-left p-2.5 flex justify-between items-center">
+                                    <span class="truncate">Select Sloc...</span>
+                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </button>
+                                <div id="dropdown-sloc" class="hidden absolute top-full left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 multiselect-dropdown p-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DASHBOARD CONTENT -->
+                <div class="px-6 pb-6">
+                    <!-- 3 Key Metrics Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <!-- Card 1: Total Weight -->
+                        <div class="bg-white rounded-xl shadow p-6 border-l-4 border-blue-500 relative overflow-hidden group hover:shadow-lg transition">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                                </svg>
+                            </div>
+                            <p class="text-sm font-bold text-gray-400 uppercase">Total Weight</p>
+                            <div class="flex items-baseline mt-2">
+                                <h3 id="aging-weight" class="text-4xl font-bold text-navy-800">0</h3>
+                                <span class="ml-2 text-sm font-semibold text-gray-500">Tons</span>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-2">Sum of Weight / 1000</p>
+                        </div>
+                        <!-- Card 2: Total HU -->
+                        <div class="bg-white rounded-xl shadow p-6 border-l-4 border-orange-500 relative overflow-hidden group hover:shadow-lg transition">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                </svg>
+                            </div>
+                            <p class="text-sm font-bold text-gray-400 uppercase">Total HU</p>
+                            <div class="flex items-baseline mt-2">
+                                <h3 id="aging-hu" class="text-4xl font-bold text-navy-800">0</h3>
+                                <span class="ml-2 text-sm font-semibold text-gray-500">Units</span>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-2">Total Handling Units</p>
+                        </div>
+                        <!-- Card 3: Unique Mat.Code -->
+                        <div class="bg-white rounded-xl shadow p-6 border-l-4 border-emerald-500 relative overflow-hidden group hover:shadow-lg transition">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                </svg>
+                            </div>
+                            <p class="text-sm font-bold text-gray-400 uppercase">Materials</p>
+                            <div class="flex items-baseline mt-2">
+                                <h3 id="aging-mat" class="text-4xl font-bold text-navy-800">0</h3>
+                                <span class="ml-2 text-sm font-semibold text-gray-500">Codes</span>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-2">Unique Mat.Code Count</p>
+                        </div>
+                    </div>
+
+                    <!-- NEW: Sloc & Aging Period Charts (Added Before Group Sale) -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <!-- CHART: Sloc -->
+                        <div class="bg-white rounded-xl shadow p-6">
+                            <h3 class="text-lg font-bold text-navy-800 mb-4 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                Sloc Distribution (Tons)
+                            </h3>
+                            <div class="relative h-[400px] w-full">
+                                <canvas id="slocChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- CHART: Aging Period -->
+                         <div class="bg-white rounded-xl shadow p-6">
+                            <h3 class="text-lg font-bold text-navy-800 mb-4 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Aging Period Comparison (Tons)
+                            </h3>
+                            <div class="relative h-[400px] w-full">
+                                <canvas id="agingPeriodChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CHART 1: Group Sale Weight -->
+                    <div class="bg-white rounded-xl shadow p-6 mb-6">
+                        <h3 class="text-lg font-bold text-navy-800 mb-4 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                            Group Sale (Tons)
+                        </h3>
+                        <div class="relative h-[500px] w-full">
+                            <canvas id="agingChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- NEW CHARTS ROW -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <!-- CHART 2: Group Product -->
+                        <div class="bg-white rounded-xl shadow p-6">
+                            <h3 class="text-lg font-bold text-navy-800 mb-4 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                </svg>
+                                Group Product (Tons)
+                            </h3>
+                            <div class="relative h-[400px] w-full">
+                                <canvas id="groupProductChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- CHART 3: Product Type (Pie Chart) -->
+                        <div class="bg-white rounded-xl shadow p-6">
+                            <h3 class="text-lg font-bold text-navy-800 mb-4 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                                </svg>
+                                Product Type (Tons)
+                            </h3>
+                            <div class="relative h-[400px] w-full flex justify-center">
+                                <canvas id="productTypeChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CHART 4: Active vs Non-Active by Group Sale -->
+                    <div class="bg-white rounded-xl shadow p-6 mb-8">
+                        <h3 class="text-lg font-bold text-navy-800 mb-4 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Active vs Non-Active (Based on Age Day)
+                        </h3>
+                        <div class="relative h-[800px] w-full">
+                            <canvas id="activeStatusChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- NEW: DETAILED INVENTORY TABLE -->
+                    <div class="bg-white rounded-xl shadow p-6 mb-8">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold text-navy-800 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-navy-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                                </svg>
+                                Detailed Inventory
+                            </h3>
+                            <span id="detailed-count" class="text-xs font-semibold bg-navy-100 text-navy-700 px-2 py-1 rounded">0 Rows</span>
+                        </div>
+                        <div class="table-container border border-gray-100 rounded-lg">
+                            <table class="min-w-full text-sm text-left">
+                                <thead class="text-xs text-white uppercase bg-navy-800 sticky top-0 z-10">
+                                    <tr>
+                                        <th class="px-4 py-3 border-r border-navy-700">HU</th>
+                                        <th class="px-4 py-3 border-r border-navy-700">Mat.Code</th>
+                                        <th class="px-4 py-3 border-r border-navy-700">Description</th>
+                                        <th class="px-4 py-3 border-r border-navy-700">Batch</th>
+                                        <th class="px-4 py-3 border-r border-navy-700 text-right">Qty</th>
+                                        <th class="px-4 py-3 border-r border-navy-700 text-right">Weight (KG)</th>
+                                        <th class="px-4 py-3">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="detailedInventoryTableBody" class="divide-y divide-gray-100">
+                                    <!-- Dynamic Rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Content Storage & 12L1 remains same structure but added margin top for consistency -->
+            <div id="content-storage" class="tab-content hidden animate-fade-in p-6">
+                <div id="storage-dashboard-area" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"></div>
+                <div id="storage-preview-container" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hidden">
+                    <h3 class="font-bold text-navy-800 mb-4 border-l-4 border-orange-500 pl-3">โครงสร้างข้อมูล (Storage & Area)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr><th class="px-6 py-3">Table</th><th class="px-6 py-3">Columns</th><th class="px-6 py-3">Sample Data</th></tr>
+                            </thead>
+                            <tbody id="storage-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="content-12l1" class="tab-content hidden animate-fade-in p-6">
+                <div id="12l1-dashboard-area" class="grid grid-cols-1 gap-6 mb-8"></div>
+                <div id="12l1-preview-container" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hidden">
+                    <h3 class="font-bold text-navy-800 mb-4 border-l-4 border-orange-500 pl-3">โครงสร้างข้อมูล (12L1 Data Structure)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm text-left text-gray-500">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr><th class="px-6 py-3">Columns</th><th class="px-6 py-3">Sample Data</th></tr>
+                            </thead>
+                            <tbody id="12l1-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- LOADING MODAL (Restored) -->
+    <div id="loading-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-navy-900 bg-opacity-80 backdrop-blur-sm hidden transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 transform transition-all scale-100 relative border-t-4 border-orange-500">
+            <div id="modal-content-loading">
+                <div class="text-center mb-6">
+                    <div id="spinner-icon" class="inline-block p-4 rounded-full bg-blue-50 mb-4 animate-bounce">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-navy-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                    </div>
+                    <!-- Error Icon -->
+                    <div id="error-icon" class="hidden inline-block p-3 rounded-full bg-red-100 mb-4">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </div>
+                    <h3 id="modal-title" class="text-xl font-bold text-navy-900">กำลังเตรียมข้อมูล...</h3>
+                    <p class="text-sm text-gray-500 mt-1" id="loading-status-text">เชื่อมต่อฐานข้อมูล</p>
+                </div>
+                <!-- Progress Bar -->
+                <div id="progress-container" class="relative pt-1 mb-4">
+                     <div class="flex mb-2 items-center justify-between">
+                        <div><span class="text-xs font-bold inline-block py-1 px-2 uppercase rounded bg-orange-100 text-orange-600">Progress</span></div>
+                        <div class="text-right"><span id="percentage-text" class="text-xs font-bold inline-block text-orange-600">0%</span></div>
+                    </div>
+                    <div class="overflow-hidden h-3 mb-4 text-xs flex rounded bg-gray-200">
+                        <div id="progress-fill" style="width:0%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-orange-500"></div>
+                    </div>
+                </div>
+                <!-- Stats -->
+                <div id="stats-container" class="bg-gray-50 rounded-lg p-4 text-xs text-gray-600 space-y-2 border border-gray-100">
+                    <div class="flex justify-between border-b border-gray-200 pb-1"><span>Current Table:</span><span id="current-table-name" class="font-bold text-navy-800">-</span></div>
+                    <div class="flex justify-between"><span>Loaded:</span><span id="fetched-count">0</span></div>
+                    <div class="flex justify-between"><span>Total (Est.):</span><span id="total-estimate">...</span></div>
+                </div>
+                <!-- Retry Button -->
+                <div id="retry-container" class="hidden mt-4 text-center">
+                    <button onclick="location.reload()" class="bg-navy-800 hover:bg-navy-900 text-white font-bold py-2 px-6 rounded-lg shadow transition">ลองใหม่ (Reload)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script>
+        // --- 1. CONFIGURATION ---
+        const SUPABASE_URL = 'https://mtrxuxmwqilajpzthwgm.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_19rRmV0jbDj56FYDtuopwg_B-2Gfh4C'; 
+        
+        const TABLE_NAMES = ['12L1', 'Aging', 'Area', 'Storage'];
+        const CHUNK_SIZE = 1000;
+
+        let supabaseClient;
+        let dbData = { '12L1': [], 'Aging': [], 'Area': [], 'Storage': [] };
+        let chartInstances = {
+            aging: null,
+            groupProduct: null,
+            productType: null,
+            activeStatus: null,
+            sloc: null,
+            agingPeriod: null
+        };
+        
+        let selectedFilters = {
+            month: new Set(),
+            period: new Set(),
+            status: new Set(),
+            sloc: new Set()
+        };
+
+        // --- HELPER FUNCTIONS ---
+
+        function updateStatus(isOnline, text) {
+            const indicator = document.getElementById('status-indicator');
+            if (indicator) {
+                if (isOnline) {
+                    indicator.innerHTML = `<span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span> ${text}`;
+                    indicator.className = "flex items-center gap-2 text-xs text-green-300";
+                } else {
+                    indicator.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> ${text}`;
+                    indicator.className = "flex items-center gap-2 text-xs text-red-300";
+                }
+            }
+        }
+
+        function showErrorState(msg) {
+            document.getElementById('spinner-icon').classList.add('hidden');
+            document.getElementById('error-icon').classList.remove('hidden');
+            document.getElementById('progress-container').classList.add('hidden');
+            document.getElementById('stats-container').classList.add('hidden');
+            document.getElementById('modal-title').innerText = "เกิดข้อผิดพลาด";
+            document.getElementById('modal-title').classList.add('text-red-600');
+            document.getElementById('loading-status-text').innerText = msg;
+            document.getElementById('loading-status-text').classList.add('text-red-500');
+            document.getElementById('retry-container').classList.remove('hidden');
+            updateStatus(false, 'Failed');
+        }
+
+        function updateProgress(current, total) {
+            const percentage = total === 0 ? 0 : Math.round((current / total) * 100);
+            const fill = document.getElementById('progress-fill');
+            if(fill) fill.style.width = `${percentage}%`;
+            
+            const text = document.getElementById('percentage-text');
+            if(text) text.innerText = `${percentage}%`;
+            
+            const count = document.getElementById('fetched-count');
+            if(count) count.innerText = current.toLocaleString();
+            
+            const status = document.getElementById('loading-status-text');
+            if(status) status.innerText = `กำลังดึงข้อมูล... (${percentage}%)`;
+        }
+
+        // --- MAIN INIT LOGIC ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if(window.Chart && window.ChartDataLabels) {
+                Chart.register(ChartDataLabels);
+                Chart.defaults.font.family = "'Sarabun', sans-serif";
+                Chart.defaults.font.size = 14; 
+                Chart.defaults.color = '#475569'; 
+            }
+
+            try {
+                if (typeof supabase === 'undefined') {
+                    throw new Error("Supabase library not loaded");
+                }
+                supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                updateStatus(true, 'Ready');
+                setTimeout(startDataSync, 500); 
+            } catch (e) {
+                console.error("Init Error", e);
+                setTimeout(() => updateStatus(false, 'Init Failed: ' + e.message), 100);
+            }
+
+            document.addEventListener('click', (e) => {
+                const dropdowns = ['month', 'period', 'status', 'sloc'];
+                dropdowns.forEach(id => {
+                    const container = document.getElementById(`container-${id}`);
+                    const dropdown = document.getElementById(`dropdown-${id}`);
+                    if (container && !container.contains(e.target) && dropdown) {
+                        dropdown.classList.add('hidden');
+                    }
+                });
+            });
+        });
+
+        // --- UI & NAVIGATION FUNCTIONS ---
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const icon = document.getElementById('toggle-icon');
+            sidebar.classList.toggle('collapsed');
+            if (sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('w-64');
+                sidebar.classList.add('w-20');
+                icon.setAttribute('d', 'M9 5l7 7-7 7'); 
+            } else {
+                sidebar.classList.remove('w-20');
+                sidebar.classList.add('w-64');
+                icon.setAttribute('d', 'M15 19l-7-7 7-7'); 
+            }
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+            document.getElementById(`btn-${tabName}`).classList.add('active');
+            
+            const titles = { 'aging': 'Aging Analysis', 'storage': 'Storage Capacity', '12l1': '12L1 Overview' };
+            document.getElementById('page-title').innerText = titles[tabName];
+        }
+
+        async function startDataSync() {
+            const modal = document.getElementById('loading-modal');
+            const statusText = document.getElementById('loading-status-text');
+            if(modal) modal.classList.remove('hidden');
+            
+            let totalRowsToFetch = 0;
+            let totalFetchedGlobal = 0;
+
+            try {
+                if(statusText) statusText.innerText = "กำลังตรวจสอบข้อมูล...";
+                const tableCounts = {};
+                for (const table of TABLE_NAMES) {
+                    const { count, error } = await supabaseClient.from(table).select('*', { count: 'exact', head: true });
+                    if (error) throw new Error(`Error accessing ${table}: ${error.message}`);
+                    tableCounts[table] = count || 0;
+                    totalRowsToFetch += (count || 0);
+                }
+                const estTotal = document.getElementById('total-estimate');
+                if(estTotal) estTotal.innerText = totalRowsToFetch.toLocaleString();
+
+                if (totalRowsToFetch === 0 && statusText) statusText.innerText = "ไม่พบข้อมูล";
+
+                for (const tableName of TABLE_NAMES) {
+                    const count = tableCounts[tableName];
+                    const currentTableLabel = document.getElementById('current-table-name');
+                    if(currentTableLabel) currentTableLabel.innerText = tableName;
+                    
+                    dbData[tableName] = [];
+                    if (count === 0) continue;
+
+                    for (let i = 0; i < count; i += CHUNK_SIZE) {
+                        const { data, error } = await supabaseClient.from(tableName).select('*').range(i, i + CHUNK_SIZE - 1);
+                        if (error) throw error;
+                        if (data) {
+                            dbData[tableName].push(...data);
+                            totalFetchedGlobal += data.length;
+                        }
+                        updateProgress(totalFetchedGlobal, totalRowsToFetch);
+                        await new Promise(r => setTimeout(r, 10)); 
+                    }
+                }
+
+                if(statusText) statusText.innerText = "โหลดข้อมูลเสร็จสิ้น!";
+                setTimeout(() => {
+                    if(modal) modal.classList.add('hidden');
+                    initAgingFilters();
+                    distributeDataToTabs(); 
+                    updateStatus(true, 'Data Synced');
+                }, 800);
+
+            } catch (err) {
+                console.error("Sync Error:", err);
+                showErrorState(err.message);
+            }
+        }
+
+        // --- FILTER & LOGIC FUNCTIONS ---
+        
+        function findColumnValue(row, ...possibleNames) {
+            for (const name of possibleNames) {
+                if (row[name] !== undefined) return row[name];
+            }
+            const normalizedNames = possibleNames.map(n => n.toLowerCase().replace(/[^a-z0-9]/g, ''));
+            const rowKeys = Object.keys(row);
+            for (const key of rowKeys) {
+                const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (normalizedNames.includes(normalizedKey)) return row[key];
+            }
+            return undefined;
+        }
+
+        function getAgeDayValue(row) {
+            let val = row['Day'];
+            if (val === undefined) val = findColumnValue(row, 'Day');
+            if (typeof val === 'number') return val;
+            const str = String(val !== undefined && val !== null ? val : '').trim();
+            if (str === '-' || str === '') return 0;
+            const cleanStr = str.replace(/,/g, '');
+            const num = parseFloat(cleanStr);
+            return isNaN(num) ? 0 : num;
+        }
+
+        function initAgingFilters() {
+            const agingData = dbData['Aging'] || [];
+            if (agingData.length === 0) return;
+
+            const months = new Set();
+            const statuses = new Set();
+            const slocs = new Set();
+
+            agingData.forEach(row => {
+                const month = findColumnValue(row, 'Month', 'month', 'MONTH');
+                if (month) months.add(month);
+                const status = findColumnValue(row, 'Status', 'status', 'STATUS');
+                if (status) statuses.add(status);
+                const sloc = findColumnValue(row, 'Sloc', 'sloc', 'SLOC', 'Sloc.');
+                if (sloc) slocs.add(sloc);
+            });
+
+            selectedFilters.month.clear();
+            selectedFilters.period.clear();
+            selectedFilters.status.clear();
+            selectedFilters.sloc.clear();
+
+            renderMultiSelect('month', Array.from(months).sort());
+            renderMultiSelect('status', Array.from(statuses).sort());
+            renderMultiSelect('sloc', Array.from(slocs).sort());
+            
+            const periodOptions = ['<1', '>1', '>2', '>3'];
+            const periodLabels = { '<1': 'น้อยกว่า 1 ปี', '>1': 'มากกว่า 1 ปี', '>2': 'มากกว่า 2 ปี', '>3': 'มากกว่า 3 ปี' };
+            renderMultiSelect('period', periodOptions, periodLabels);
+
+            applyAgingFilters();
+        }
+
+        function toggleDropdown(id) {
+            const dropdown = document.getElementById(`dropdown-${id}`);
+            if(dropdown) dropdown.classList.toggle('hidden');
+        }
+
+        function renderMultiSelect(id, values, labelMap = {}) {
+            const dropdown = document.getElementById(`dropdown-${id}`);
+            if(!dropdown) return;
+            dropdown.innerHTML = '';
+            if (values.length === 0) {
+                dropdown.innerHTML = '<div class="p-2 text-xs text-gray-500">No data available</div>';
+                return;
+            }
+            values.forEach(val => {
+                const labelText = labelMap[val] || val;
+                const div = document.createElement('div');
+                div.className = 'flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer';
+                div.onclick = (e) => {
+                    e.stopPropagation();
+                    const cb = div.querySelector('input');
+                    cb.checked = !cb.checked;
+                    updateFilterState(id, val, cb.checked);
+                };
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 mr-2';
+                checkbox.checked = selectedFilters[id].has(val);
+                checkbox.onclick = (e) => e.stopPropagation();
+                checkbox.onchange = (e) => updateFilterState(id, val, e.target.checked);
+                const label = document.createElement('span');
+                label.className = 'text-sm text-gray-700';
+                label.innerText = labelText;
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                dropdown.appendChild(div);
+            });
+        }
+
+        function updateFilterState(id, value, isChecked) {
+            if (isChecked) selectedFilters[id].add(value);
+            else selectedFilters[id].delete(value);
+            const btn = document.querySelector(`#btn-${id} span`);
+            const count = selectedFilters[id].size;
+            if(btn) {
+                if (count === 0) btn.innerText = `Select ${id.charAt(0).toUpperCase() + id.slice(1)}...`;
+                else btn.innerText = `${count} Selected`;
+            }
+            applyAgingFilters();
+        }
+
+        function clearAllFilters() {
+            selectedFilters.month.clear();
+            selectedFilters.period.clear();
+            selectedFilters.status.clear();
+            selectedFilters.sloc.clear();
+            document.querySelectorAll('.multiselect-dropdown input[type="checkbox"]').forEach(cb => cb.checked = false);
+            ['month', 'period', 'status', 'sloc'].forEach(id => {
+                const btn = document.querySelector(`#btn-${id} span`);
+                if(btn) btn.innerText = `Select ${id.charAt(0).toUpperCase() + id.slice(1)}...`;
+            });
+            applyAgingFilters();
+        }
+
+        function applyAgingFilters() {
+            const agingData = dbData['Aging'] || [];
+            const filteredData = agingData.filter(row => {
+                if (selectedFilters.month.size > 0) {
+                    const rMonth = findColumnValue(row, 'Month', 'month', 'MONTH');
+                    if (!selectedFilters.month.has(rMonth)) return false;
+                }
+                if (selectedFilters.status.size > 0) {
+                    const rStatus = findColumnValue(row, 'Status', 'status', 'STATUS');
+                    if (!selectedFilters.status.has(rStatus)) return false;
+                }
+                if (selectedFilters.sloc.size > 0) {
+                    const rSloc = findColumnValue(row, 'Sloc', 'sloc', 'SLOC', 'Sloc.');
+                    if (!selectedFilters.sloc.has(rSloc)) return false;
+                }
+                if (selectedFilters.period.size > 0) {
+                    const day = getAgeDayValue(row);
+                    let match = false;
+                    if (selectedFilters.period.has('<1') && day < 365) match = true;
+                    if (selectedFilters.period.has('>1') && (day >= 365 && day < 730)) match = true;
+                    if (selectedFilters.period.has('>2') && (day >= 730 && day < 1095)) match = true;
+                    if (selectedFilters.period.has('>3') && day >= 1095) match = true;
+                    if (!match) return false;
+                }
+                return true;
+            });
+            calculateAgingMetrics(filteredData);
+        }
+
+        function calculateAgingMetrics(data) {
+            let totalWeight = 0;
+            let totalHU = 0;
+            const uniqueMatCodes = new Set();
+            
+            const groupSaleMap = {};
+            const groupProductMap = {};
+            const productTypeMap = {};
+            const activeStatusMap = {};
+            const slocMap = {};
+            const periodMap = { '< 1 Year': 0, '> 1 Year': 0, '> 2 Years': 0, '> 3 Years': 0 };
+
+            const tableBody = document.getElementById('detailedInventoryTableBody');
+            tableBody.innerHTML = ''; // Clear table
+
+            data.forEach(row => {
+                let w = findColumnValue(row, 'Weight', 'weight', 'WEIGHT');
+                if (typeof w === 'string') w = parseFloat(w.replace(/,/g, ''));
+                w = isNaN(w) ? 0 : w;
+                totalWeight += w;
+
+                let huVal = findColumnValue(row, 'HU', 'hu', 'Hu');
+                if (huVal) totalHU++;
+                else if (Object.keys(row).length > 0) totalHU++;
+
+                const matCode = findColumnValue(row, 'Mat.Code', 'mat.code', 'Mat_Code', 'Material', 'Material Code');
+                if (matCode) uniqueMatCodes.add(matCode);
+
+                const grpSale = findColumnValue(row, 'Group Sale', 'group sale', 'Group_Sale') || 'Others';
+                groupSaleMap[grpSale] = (groupSaleMap[grpSale] || 0) + w;
+
+                const grpProd = findColumnValue(row, 'Group Product', 'group product', 'Group_Product') || 'Others';
+                groupProductMap[grpProd] = (groupProductMap[grpProd] || 0) + w;
+
+                const prodType = findColumnValue(row, 'Product Type', 'product type', 'Product_Type') || 'Others';
+                productTypeMap[prodType] = (productTypeMap[prodType] || 0) + w;
+
+                const sloc = findColumnValue(row, 'Sloc', 'sloc', 'SLOC', 'Sloc.') || 'Unknown';
+                slocMap[sloc] = (slocMap[sloc] || 0) + w;
+
+                const day = getAgeDayValue(row);
+                if (day < 365) periodMap['< 1 Year'] += w;
+                else if (day < 730) periodMap['> 1 Year'] += w;
+                else if (day < 1095) periodMap['> 2 Years'] += w;
+                else periodMap['> 3 Years'] += w;
+
+                let rawAgeVal = row['Age Day'];
+                if (rawAgeVal === undefined) rawAgeVal = findColumnValue(row, 'Age Day');
+                const rawAgeStr = String(rawAgeVal !== undefined && rawAgeVal !== null ? rawAgeVal : '').trim();
+                const isActive = rawAgeStr === '-' || rawAgeStr === '0';
+                if (!activeStatusMap[grpSale]) activeStatusMap[grpSale] = { active: 0, nonActive: 0 };
+                if (isActive) activeStatusMap[grpSale].active += w;
+                else activeStatusMap[grpSale].nonActive += w;
+
+                // --- Build Detailed Table Rows ---
+                const desc = findColumnValue(row, 'Material Description', 'Description', 'description') || '-';
+                const batch = findColumnValue(row, 'Batch', 'batch') || '-';
+                const qty = findColumnValue(row, 'Qty', 'qty', 'Stock') || 0;
+                const status = findColumnValue(row, 'Status', 'status') || '-';
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-50 border-b border-gray-100 transition';
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-mono text-xs text-navy-800">${huVal || '-'}</td>
+                    <td class="px-4 py-3 font-semibold text-navy-800">${matCode || '-'}</td>
+                    <td class="px-4 py-3 text-gray-600 max-w-xs truncate" title="${desc}">${desc}</td>
+                    <td class="px-4 py-3 text-gray-600">${batch}</td>
+                    <td class="px-4 py-3 text-right font-semibold text-navy-800">${Number(qty).toLocaleString()}</td>
+                    <td class="px-4 py-3 text-right font-semibold text-orange-600">${w.toLocaleString()}</td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${status.toLowerCase() === 'blocked' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}">
+                            ${status}
+                        </span>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            document.getElementById('detailed-count').innerText = `${data.length.toLocaleString()} Rows`;
+
+            // Update Cards
+            const weightInTons = totalWeight / 1000;
+            const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+            const fmtInt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+
+            if(document.getElementById('aging-weight')) document.getElementById('aging-weight').innerText = fmt.format(weightInTons);
+            if(document.getElementById('aging-hu')) document.getElementById('aging-hu').innerText = fmtInt.format(totalHU);
+            if(document.getElementById('aging-mat')) document.getElementById('aging-mat').innerText = fmtInt.format(uniqueMatCodes.size);
+
+            // Update Charts
+            renderHorizontalBarChart('agingChart', 'aging', groupSaleMap, totalWeight, 'Group Sale');
+            renderHorizontalBarChart('groupProductChart', 'groupProduct', groupProductMap, totalWeight, 'Group Product');
+            renderPieChart('productTypeChart', 'productType', productTypeMap, totalWeight, 'Product Type');
+            renderActiveStatusChart('activeStatusChart', 'activeStatus', activeStatusMap, totalWeight);
+            renderHorizontalBarChart('slocChart', 'sloc', slocMap, totalWeight, 'Sloc');
+            renderHorizontalBarChart('agingPeriodChart', 'agingPeriod', periodMap, totalWeight, 'Aging Period');
+        }
+
+        // --- CHART RENDERING FUNCTIONS ---
+        function renderHorizontalBarChart(canvasId, instanceName, dataMap, totalWeightRaw, labelTitle) {
+            const canvas = document.getElementById(canvasId);
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (chartInstances[instanceName]) chartInstances[instanceName].destroy();
+
+            const sortedEntries = Object.entries(dataMap)
+                .map(([name, weight]) => ({ name, weight: weight / 1000, raw: weight })) 
+                .sort((a, b) => b.weight - a.weight);
+
+            const labels = sortedEntries.map(e => e.name);
+            const data = sortedEntries.map(e => e.weight);
+            const rawData = sortedEntries.map(e => e.raw);
+
+            const colors = ['rgba(249, 115, 22, 0.8)', 'rgba(30, 58, 138, 0.8)', 'rgba(16, 185, 129, 0.8)', 'rgba(59, 130, 246, 0.8)', 'rgba(236, 72, 153, 0.8)', 'rgba(139, 92, 246, 0.8)', 'rgba(245, 158, 11, 0.8)'];
+            const bgColors = labels.map((_, i) => colors[i % colors.length]);
+
+            chartInstances[instanceName] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: labelTitle,
+                        data: data,
+                        backgroundColor: bgColors,
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        barPercentage: 0.7
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { right: 80 } },
+                    scales: {
+                        x: { grid: { display: false }, beginAtZero: true },
+                        y: { grid: { display: false }, ticks: { font: { size: 12, weight: '600' } } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end', align: 'end', color: '#334155',
+                            font: { weight: 'bold', size: 10 }, 
+                            formatter: (value, ctx) => {
+                                const raw = rawData[ctx.dataIndex];
+                                const percent = totalWeightRaw > 0 ? (raw / totalWeightRaw) * 100 : 0;
+                                return `${value.toLocaleString(undefined, {maximumFractionDigits: 1})} T\n(${percent.toFixed(1)}%)`;
+                            },
+                            clip: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderPieChart(canvasId, instanceName, dataMap, totalWeightRaw, labelTitle) {
+            const canvas = document.getElementById(canvasId);
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (chartInstances[instanceName]) chartInstances[instanceName].destroy();
+
+            const sortedEntries = Object.entries(dataMap)
+                .map(([name, weight]) => ({ name, weight: weight / 1000, raw: weight })) 
+                .sort((a, b) => b.weight - a.weight);
+
+            const labels = sortedEntries.map(e => e.name);
+            const data = sortedEntries.map(e => e.weight);
+            const rawData = sortedEntries.map(e => e.raw);
+
+            const colors = ['rgba(16, 185, 129, 0.8)', 'rgba(59, 130, 246, 0.8)', 'rgba(249, 115, 22, 0.8)', 'rgba(236, 72, 153, 0.8)', 'rgba(139, 92, 246, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(30, 58, 138, 0.8)'];
+            const bgColors = labels.map((_, i) => colors[i % colors.length]);
+
+            chartInstances[instanceName] = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{ data: data, backgroundColor: bgColors, borderWidth: 1 }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: 20 },
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const raw = rawData[ctx.dataIndex];
+                                    const percent = totalWeightRaw > 0 ? (raw / totalWeightRaw) * 100 : 0;
+                                    return `${ctx.label}: ${ctx.parsed.toLocaleString(undefined, {maximumFractionDigits: 1})} T (${percent.toFixed(1)}%)`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            color: '#fff',
+                            font: { weight: 'bold', size: 10 }, 
+                            formatter: (value, ctx) => {
+                                const raw = rawData[ctx.dataIndex];
+                                const percent = totalWeightRaw > 0 ? (raw / totalWeightRaw) * 100 : 0;
+                                if (percent < 5) return '';
+                                return `${percent.toFixed(0)}%`;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderActiveStatusChart(canvasId, instanceName, dataMap, totalWeightRaw) {
+            const canvas = document.getElementById(canvasId);
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (chartInstances[instanceName]) chartInstances[instanceName].destroy();
+
+            const labels = Object.keys(dataMap).sort(); 
+            labels.sort((a, b) => (dataMap[b].active + dataMap[b].nonActive) - (dataMap[a].active + dataMap[a].nonActive));
+
+            const dataActive = labels.map(label => dataMap[label].active / 1000);
+            const dataNonActive = labels.map(label => dataMap[label].nonActive / 1000);
+            
+            chartInstances[instanceName] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Active (-, 0)', data: dataActive, backgroundColor: 'rgba(34, 197, 94, 0.8)', borderColor: 'rgba(34, 197, 94, 1)', borderWidth: 1, borderRadius: 4, barPercentage: 0.6 },
+                        { label: 'Non-Active (Age Day)', data: dataNonActive, backgroundColor: 'rgba(239, 68, 68, 0.8)', borderColor: 'rgba(239, 68, 68, 1)', borderWidth: 1, borderRadius: 4, barPercentage: 0.6 }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { right: 80 } },
+                    scales: {
+                        x: { stacked: true, grid: { display: false }, beginAtZero: true },
+                        y: { stacked: true, grid: { display: false }, ticks: { font: { size: 12, weight: '600' } } }
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { font: { size: 11 } } },
+                        datalabels: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.7)', 
+                            borderRadius: 4, color: '#000', font: { weight: 'bold', size: 10 }, 
+                            anchor: 'center', align: 'center',
+                            formatter: (value, ctx) => {
+                                if (value <= 0) return '';
+                                const label = ctx.chart.data.labels[ctx.dataIndex];
+                                const stackTotal = (dataMap[label].active + dataMap[label].nonActive) / 1000;
+                                const percent = stackTotal > 0 ? (value / stackTotal) * 100 : 0;
+                                return `${value.toLocaleString(undefined, {maximumFractionDigits: 0})}T\n${percent.toFixed(0)}%`;
+                            },
+                            textAlign: 'center'
+                        }
+                    }
+                }
+            });
+        }
+
+        function distributeDataToTabs() {
+            renderTableInfo('Storage', 'storage-dashboard-area', 'storage-tbody', true); 
+            renderTableInfo('Area', 'storage-dashboard-area', 'storage-tbody', true);
+            document.getElementById('storage-preview-container').classList.remove('hidden');
+            renderTableInfo('12L1', '12l1-dashboard-area', '12l1-tbody');
+            document.getElementById('12l1-preview-container').classList.remove('hidden');
+        }
+
+        function renderTableInfo(tableName, dashboardId, tbodyId, append = false) {
+            const count = dbData[tableName].length;
+            const columns = dbData[tableName].length > 0 ? Object.keys(dbData[tableName][0]) : [];
+            const colCount = columns.length;
+            const colStr = columns.join(', ');
+            const card = `
+                <div class="bg-white rounded-xl shadow p-6 border-t-4 border-navy-800">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-bold text-gray-400 uppercase tracking-wider">${tableName}</p>
+                            <h3 class="text-3xl font-bold text-navy-900 mt-2">${count.toLocaleString()}</h3>
+                            <p class="text-xs text-orange-500 font-semibold mt-1">Rows Loaded</p>
+                        </div>
+                        <div class="bg-blue-50 p-2 rounded-lg">
+                            <span class="text-xl font-bold text-navy-800">${colCount}</span>
+                            <span class="text-xs block text-center text-navy-600">Cols</span>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-100">
+                        <p class="text-xs text-gray-400 font-mono truncate" title="${colStr}">Fields: ${colStr}</p>
+                    </div>
+                </div>
+            `;
+            const dashboardArea = document.getElementById(dashboardId);
+            if (!append) dashboardArea.innerHTML = '';
+            dashboardArea.innerHTML += card;
+            if (count > 0) {
+                const firstRow = dbData[tableName][0];
+                const sample = JSON.stringify(firstRow).substring(0, 80) + '...';
+                const tr = `
+                    <tr class="bg-white border-b hover:bg-gray-50">
+                        ${append ? `<td class="px-6 py-4 font-bold text-navy-800">${tableName}</td>` : ''}
+                        <td class="px-6 py-4"><div class="text-xs font-mono text-navy-600 bg-blue-50 p-2 rounded whitespace-pre-wrap max-w-md">${colStr}</div></td>
+                        <td class="px-6 py-4 text-xs font-mono text-gray-500 whitespace-pre-wrap break-all">${sample}</td>
+                    </tr>
+                `;
+                document.getElementById(tbodyId).innerHTML += tr;
+            }
+        }
+    </script>
+</body>
+</html>
